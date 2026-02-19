@@ -56,7 +56,7 @@ func InitDB(cfg *configs.Config) (*Database, error) {
 
 // generateDSN generates PostgreSQL connection string
 func generateDSN(dbConfig configs.DatabaseConfig) string {
-	return fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=%s search_path=public,mst,account,dealer,leasing,payment",
+	return fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=%s search_path=public,mst,account,dealer,leasing,finance",
 		dbConfig.Host,
 		dbConfig.User,
 		dbConfig.Password,

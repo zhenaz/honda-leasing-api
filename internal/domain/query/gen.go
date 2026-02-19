@@ -31,6 +31,8 @@ var (
 	MotorAsset              *motorAsset
 	MotorType               *motorType
 	OauthProvider           *oauthProvider
+	Payment                 *payment
+	PaymentSchedule         *paymentSchedule
 	Permission              *permission
 	Province                *province
 	Role                    *role
@@ -58,6 +60,8 @@ func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
 	MotorAsset = &Q.MotorAsset
 	MotorType = &Q.MotorType
 	OauthProvider = &Q.OauthProvider
+	Payment = &Q.Payment
+	PaymentSchedule = &Q.PaymentSchedule
 	Permission = &Q.Permission
 	Province = &Q.Province
 	Role = &Q.Role
@@ -86,6 +90,8 @@ func Use(db *gorm.DB, opts ...gen.DOOption) *Query {
 		MotorAsset:              newMotorAsset(db, opts...),
 		MotorType:               newMotorType(db, opts...),
 		OauthProvider:           newOauthProvider(db, opts...),
+		Payment:                 newPayment(db, opts...),
+		PaymentSchedule:         newPaymentSchedule(db, opts...),
 		Permission:              newPermission(db, opts...),
 		Province:                newProvince(db, opts...),
 		Role:                    newRole(db, opts...),
@@ -115,6 +121,8 @@ type Query struct {
 	MotorAsset              motorAsset
 	MotorType               motorType
 	OauthProvider           oauthProvider
+	Payment                 payment
+	PaymentSchedule         paymentSchedule
 	Permission              permission
 	Province                province
 	Role                    role
@@ -145,6 +153,8 @@ func (q *Query) clone(db *gorm.DB) *Query {
 		MotorAsset:              q.MotorAsset.clone(db),
 		MotorType:               q.MotorType.clone(db),
 		OauthProvider:           q.OauthProvider.clone(db),
+		Payment:                 q.Payment.clone(db),
+		PaymentSchedule:         q.PaymentSchedule.clone(db),
 		Permission:              q.Permission.clone(db),
 		Province:                q.Province.clone(db),
 		Role:                    q.Role.clone(db),
@@ -182,6 +192,8 @@ func (q *Query) ReplaceDB(db *gorm.DB) *Query {
 		MotorAsset:              q.MotorAsset.replaceDB(db),
 		MotorType:               q.MotorType.replaceDB(db),
 		OauthProvider:           q.OauthProvider.replaceDB(db),
+		Payment:                 q.Payment.replaceDB(db),
+		PaymentSchedule:         q.PaymentSchedule.replaceDB(db),
 		Permission:              q.Permission.replaceDB(db),
 		Province:                q.Province.replaceDB(db),
 		Role:                    q.Role.replaceDB(db),
@@ -209,6 +221,8 @@ type queryCtx struct {
 	MotorAsset              IMotorAssetDo
 	MotorType               IMotorTypeDo
 	OauthProvider           IOauthProviderDo
+	Payment                 IPaymentDo
+	PaymentSchedule         IPaymentScheduleDo
 	Permission              IPermissionDo
 	Province                IProvinceDo
 	Role                    IRoleDo
@@ -236,6 +250,8 @@ func (q *Query) WithContext(ctx context.Context) *queryCtx {
 		MotorAsset:              q.MotorAsset.WithContext(ctx),
 		MotorType:               q.MotorType.WithContext(ctx),
 		OauthProvider:           q.OauthProvider.WithContext(ctx),
+		Payment:                 q.Payment.WithContext(ctx),
+		PaymentSchedule:         q.PaymentSchedule.WithContext(ctx),
 		Permission:              q.Permission.WithContext(ctx),
 		Province:                q.Province.WithContext(ctx),
 		Role:                    q.Role.WithContext(ctx),
