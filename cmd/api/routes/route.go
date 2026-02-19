@@ -10,14 +10,39 @@ import (
 )
 
 func SetupRoutes(router *gin.Engine, db *gorm.DB) {
-	// init repo
+
+	// =====================
+	// DASHBOARD MODULE
+	// =====================
+
+	dashboardService := service.NewDashboardService(db)
+	dashboardHandler := handler.NewDashboardHandler(dashboardService)
+
+	// =====================
+	// USER MODULE
+	// =====================
+
 	userRepo := repository.NewUserRepository(db)
-
-	// init service
 	userService := service.NewUserService(userRepo)
-
-	// init handler
 	userHandler := handler.NewUserHandler(userService)
+
+	// =====================
+	// LEASING MODULE
+	// =====================
+
+	leasingService := service.NewLeasingService(db)
+	leasingHandler := handler.NewLeasingHandler(leasingService)
+
+	// =====================
+	// PAYMENT MODULE
+	// =====================
+
+	paymentService := service.NewPaymentService(db)
+	paymentHandler := handler.NewPaymentHandler(paymentService)
+
+	// =====================
+	// ROUTES
+	// =====================
 
 	api := router.Group("/api/v1")
 	{
@@ -25,11 +50,33 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB) {
 			c.JSON(200, gin.H{"status": "success", "message": "ok"})
 		})
 
+		dashboard := api.Group("/dashboard")
+		{
+			dashboard.GET("/summary", dashboardHandler.GetSummary)
+		}
+
+		// USER ROUTES
 		users := api.Group("/users")
 		{
 			users.GET("", userHandler.GetUsers)
 			users.GET("/:id", userHandler.GetByID)
 			users.POST("", userHandler.CreateUser)
+			users.PUT("/:id", userHandler.UpdateUser)
+			users.DELETE("/:id", userHandler.DeleteUser)
+		}
+
+		// LEASING ROUTES
+		leasing := api.Group("/leasing")
+		{
+			leasing.POST("/contracts", leasingHandler.CreateContract)
+			leasing.GET("/contracts/:id", leasingHandler.GetContractDetail)
+
+		}
+
+		// PAYMENT ROUTES
+		payments := api.Group("/payments")
+		{
+			payments.POST("", paymentHandler.PayInstallment)
 		}
 	}
 }

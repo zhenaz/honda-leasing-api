@@ -37,7 +37,7 @@ func main() {
 
 	log.Println("🚀 Generating models...")
 
-	schemas := []string{"mst", "account", "dealer", "leasing", "payment"}
+	schemas := []string{"mst", "account", "dealer", "leasing", "finance"}
 
 	for _, schema := range schemas {
 		log.Println("📦 Generating schema:", schema)
