@@ -15,6 +15,10 @@ import (
 type LeasingService interface {
 	CreateContract(ctx context.Context, req *CreateContractRequest) (*model.LeasingContract, error)
 	GetContractDetail(ctx context.Context, id int64) (*ContractDetailResponse, error)
+	ApproveContract(ctx context.Context, id int64) error
+	// ActivateContract(ctx context.Context, id int64) error
+	ListContracts(ctx context.Context, page int, limit int, status string) ([]*model.LeasingContract, int64, error)
+	CompleteTask(ctx context.Context, taskID int64) error
 }
 
 type CreateContractRequest struct {
@@ -102,7 +106,7 @@ func (s *leasingService) CreateContract(
 			PokokPinjaman:   pokok,
 			TotalPinjaman:   totalPinjaman,
 			CicilanPerBulan: cicilan,
-			Status:          "active",
+			Status:          "draft",
 			CustomerID:      req.CustomerID,
 			MotorID:         req.MotorID,
 			ProductID:       req.ProductID,
@@ -246,4 +250,178 @@ func (s *leasingService) GetContractDetail(
 			ProgressPercent: progress,
 		},
 	}, nil
+}
+
+const (
+	ContractStatusDraft    = "draft"
+	ContractStatusApproved = "approved"
+	ContractStatusActive   = "active"
+)
+
+func (s *leasingService) ApproveContract(
+	ctx context.Context,
+	id int64,
+) error {
+
+	q := query.Use(s.db)
+
+	contract, err := q.LeasingContract.WithContext(ctx).
+		Where(q.LeasingContract.ContractID.Eq(id)).
+		First()
+
+	if err != nil {
+		return errors.New("contract not found")
+	}
+
+	if contract.Status != ContractStatusApproved {
+		return errors.New("only approved contract can be activated")
+	}
+
+	_, err = q.LeasingContract.WithContext(ctx).
+		Where(q.LeasingContract.ContractID.Eq(id)).
+		Update(q.LeasingContract.Status, ContractStatusActive)
+
+	return err
+}
+
+// func (s *leasingService) ActivateContract(
+// 	ctx context.Context,
+// 	id int64,
+// ) error {
+
+// 	q := query.Use(s.db)
+
+// 	contract, err := q.LeasingContract.WithContext(ctx).
+// 		Where(q.LeasingContract.ContractID.Eq(id)).
+// 		First()
+
+// 	if err != nil {
+// 		return errors.New("contract not found")
+// 	}
+
+// 	if contract.Status != ContractStatusApproved {
+// 		return errors.New("only approved contract can be activated")
+// 	}
+
+// 	_, err = q.LeasingContract.WithContext(ctx).
+// 		Where(q.LeasingContract.ContractID.Eq(id)).
+// 		Update(q.LeasingContract.Status, ContractStatusActive)
+
+// 	return err
+// }
+
+func (s *leasingService) ListContracts(
+	ctx context.Context,
+	page int,
+	limit int,
+	status string,
+) ([]*model.LeasingContract, int64, error) {
+
+	q := query.Use(s.db)
+
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+
+	offset := (page - 1) * limit
+
+	baseQuery := q.LeasingContract.WithContext(ctx)
+
+	if status != "" {
+		baseQuery = baseQuery.Where(q.LeasingContract.Status.Eq(status))
+	}
+
+	total, err := baseQuery.Count()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	contracts, err := baseQuery.
+		Order(q.LeasingContract.CreatedAt.Desc()).
+		Limit(limit).
+		Offset(offset).
+		Find()
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return contracts, total, nil
+}
+
+func (s *leasingService) CompleteTask(
+	ctx context.Context,
+	taskID int64,
+) error {
+
+	return s.db.Transaction(func(tx *gorm.DB) error {
+
+		q := query.Use(tx)
+
+		// 1️⃣ Ambil task
+		task, err := q.LeasingTask.WithContext(ctx).
+			Where(q.LeasingTask.TaskID.Eq(taskID)).
+			First()
+
+		if err != nil {
+			return errors.New("task not found")
+		}
+
+		// 2️⃣ Update task status
+		statusCompleted := "completed"
+
+		_, err = q.LeasingTask.WithContext(ctx).
+			Where(q.LeasingTask.TaskID.Eq(taskID)).
+			Update(q.LeasingTask.Status, statusCompleted)
+
+		if err != nil {
+			return err
+		}
+
+		// 3️⃣ Ambil semua task contract
+		tasks, err := q.LeasingTask.WithContext(ctx).
+			Where(q.LeasingTask.ContractID.Eq(task.ContractID)).
+			Find()
+
+		if err != nil {
+			return err
+		}
+
+		allCompleted := true
+
+		for _, t := range tasks {
+			if t.Status == nil || *t.Status != "completed" {
+				allCompleted = false
+				break
+			}
+		}
+
+		if allCompleted {
+
+			contract, err := q.LeasingContract.WithContext(ctx).
+				Where(q.LeasingContract.ContractID.Eq(task.ContractID)).
+				First()
+
+			if err != nil {
+				return err
+			}
+
+			// Hanya dari draft → approved
+			if contract.Status == ContractStatusDraft {
+
+				_, err = q.LeasingContract.WithContext(ctx).
+					Where(q.LeasingContract.ContractID.Eq(contract.ContractID)).
+					Update(q.LeasingContract.Status, ContractStatusApproved)
+
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		return nil
+	})
 }
