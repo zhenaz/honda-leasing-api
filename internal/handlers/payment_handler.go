@@ -38,3 +38,16 @@ func (h *PaymentHandler) PayInstallment(c *gin.Context) {
 		"message": "payment successful",
 	})
 }
+
+func (h *PaymentHandler) CheckOverdue(c *gin.Context) {
+
+	err := h.service.CheckOverdue(c.Request.Context())
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"message": "overdue check completed",
+	})
+}

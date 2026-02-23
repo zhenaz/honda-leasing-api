@@ -12,9 +12,42 @@ import (
 	"gorm.io/gorm"
 )
 
+/*
+====================================
+STATUS CONSTANTS
+====================================
+*/
+
+// Schedule status
+const (
+	ScheduleUnpaid  = "unpaid"
+	SchedulePaid    = "paid"
+	ScheduleOverdue = "overdue"
+)
+
+// Contract status (sesuai CHECK constraint DB)
+const (
+	ContractActive  = "active"
+	ContractLate    = "late"
+	ContractPaidOff = "paid_off"
+)
+
+/*
+====================================
+INTERFACE
+====================================
+*/
+
 type PaymentService interface {
 	PayInstallment(ctx context.Context, req *CreatePaymentRequest) error
+	CheckOverdue(ctx context.Context) error
 }
+
+/*
+====================================
+REQUEST STRUCT
+====================================
+*/
 
 type CreatePaymentRequest struct {
 	ScheduleID       int64   `json:"schedule_id"`
@@ -22,6 +55,12 @@ type CreatePaymentRequest struct {
 	MetodePembayaran string  `json:"metode_pembayaran"`
 	Provider         string  `json:"provider"`
 }
+
+/*
+====================================
+SERVICE IMPLEMENTATION
+====================================
+*/
 
 type paymentService struct {
 	db *gorm.DB
@@ -33,6 +72,12 @@ func NewPaymentService(db *gorm.DB) PaymentService {
 	}
 }
 
+/*
+====================================
+PAY INSTALLMENT
+====================================
+*/
+
 func (s *paymentService) PayInstallment(
 	ctx context.Context,
 	req *CreatePaymentRequest,
@@ -42,9 +87,7 @@ func (s *paymentService) PayInstallment(
 
 		q := query.Use(tx)
 
-		// =========================
 		// 1️⃣ Ambil schedule
-		// =========================
 		schedule, err := q.PaymentSchedule.WithContext(ctx).
 			Where(q.PaymentSchedule.ScheduleID.Eq(req.ScheduleID)).
 			First()
@@ -53,20 +96,15 @@ func (s *paymentService) PayInstallment(
 			return errors.New("schedule not found")
 		}
 
-		// =========================
 		// 2️⃣ Cek sudah dibayar?
-		// =========================
 		if schedule.StatusPembayaran != nil &&
-			*schedule.StatusPembayaran == "paid" {
+			*schedule.StatusPembayaran == SchedulePaid {
 			return errors.New("installment already paid")
 		}
 
-		// =========================
-		// 3️⃣ Insert payment
-		// =========================
 		now := time.Now()
-		statusPaid := "paid"
 
+		// 3️⃣ Insert payment
 		nomorBukti := fmt.Sprintf(
 			"PAY-%d-%d",
 			schedule.ScheduleID,
@@ -87,9 +125,8 @@ func (s *paymentService) PayInstallment(
 			return err
 		}
 
-		// =========================
-		// 4️⃣ Update schedule
-		// =========================
+		// 4️⃣ Update schedule → paid
+		statusPaid := SchedulePaid
 		schedule.StatusPembayaran = &statusPaid
 		schedule.TanggalBayar = &now
 
@@ -99,12 +136,11 @@ func (s *paymentService) PayInstallment(
 			return err
 		}
 
-		// =========================
-		// 5️⃣ Cek apakah semua paid
-		// =========================
+		// 5️⃣ Cek apakah semua schedule sudah paid
 		allSchedules, err := q.PaymentSchedule.WithContext(ctx).
 			Where(q.PaymentSchedule.ContractID.Eq(schedule.ContractID)).
 			Find()
+
 		if err != nil {
 			return err
 		}
@@ -112,17 +148,67 @@ func (s *paymentService) PayInstallment(
 		allPaid := true
 		for _, sc := range allSchedules {
 			if sc.StatusPembayaran == nil ||
-				*sc.StatusPembayaran != "paid" {
+				*sc.StatusPembayaran != SchedulePaid {
 				allPaid = false
 				break
 			}
 		}
 
+		// 6️⃣ Jika semua paid → contract = paid_off
 		if allPaid {
 			if _, err := q.LeasingContract.WithContext(ctx).
 				Where(q.LeasingContract.ContractID.Eq(schedule.ContractID)).
-				Update(q.LeasingContract.Status, "paid_off"); err != nil {
+				Update(q.LeasingContract.Status, ContractPaidOff); err != nil {
 				return err
+			}
+		}
+
+		return nil
+	})
+}
+
+/*
+====================================
+CHECK OVERDUE
+====================================
+*/
+
+func (s *paymentService) CheckOverdue(ctx context.Context) error {
+
+	return s.db.Transaction(func(tx *gorm.DB) error {
+
+		q := query.Use(tx)
+		now := time.Now()
+
+		// Ambil semua schedule unpaid
+		schedules, err := q.PaymentSchedule.WithContext(ctx).
+			Where(q.PaymentSchedule.StatusPembayaran.Eq(ScheduleUnpaid)).
+			Find()
+
+		if err != nil {
+			return err
+		}
+
+		for _, sc := range schedules {
+
+			// Jika sudah lewat jatuh tempo
+			if now.After(sc.JatuhTempo) {
+
+				statusOverdue := ScheduleOverdue
+
+				// Update schedule → overdue
+				if _, err := q.PaymentSchedule.WithContext(ctx).
+					Where(q.PaymentSchedule.ScheduleID.Eq(sc.ScheduleID)).
+					Update(q.PaymentSchedule.StatusPembayaran, statusOverdue); err != nil {
+					return err
+				}
+
+				// Update contract → late
+				if _, err := q.LeasingContract.WithContext(ctx).
+					Where(q.LeasingContract.ContractID.Eq(sc.ContractID)).
+					Update(q.LeasingContract.Status, ContractLate); err != nil {
+					return err
+				}
 			}
 		}
 
